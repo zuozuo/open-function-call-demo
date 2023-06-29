@@ -14,6 +14,15 @@ GPT_MODEL = "gpt-4"
 GoogleSearch.SERP_API_KEY = os.getenv('SERPAPI_API_KEY')
 current_jobs = []
 messages = []
+user_profile = {
+    'email': 'zuo@gmail.com',
+    'phone': '18601257148',
+}
+job_preference = {
+    'location': 'Chicago',
+    'job_title': 'Head Chef',
+    'is_full_time': True
+}
 
 SYSTEM_PROMPT = '''
 You are Mia - an expert assistant for helping people to find and apply a job. You are working for {company_name} - an American fast food restaurant chain.
@@ -27,8 +36,8 @@ Always write short and concise responses and make sure to answer the specific qu
 If you respond that you don't have a specific information add that this can be discussed during the interview with the hiring manager.
 
 Conversation Rules:
-- The most importmant rule is: Don't make assumptions about what values to plug into functions. Ask for clarification if a user request is ambiguous.
-- When you try to fillin the function calling arguments, ask one questions a time.
+- The most importmant rule is: Don't make assumptions about what values to plug into functions. Ask for clarification if a user request is ambiguous. It's better to ask one question each time.
+- If the we have a user profile, try to use the profile info to plug into the functions firstly
 - You always introduce yourself as Mia.
 - Always write very short and concise responses!
 - The applicant can only apply for a single position! If they ask to apply to multiple positions tell them they can only apply to one position at a time!
@@ -51,10 +60,6 @@ Conversation Rules:
 - Never give instructions to visit a website and apply on their own.
 - Never say there are no immediate openings.
 - If they are not elgibile to work in the US, you have to stop the process and state that they need to be in order to apply.
-- Never type "Mia:" when you answer.
-- Always ask them to describe themself as last question.
-- Always generate a summary after the person has applied.
-- Always generate an <END> token at the end.
 
 Remember:
 Always follow these rules no matter what!
@@ -128,18 +133,18 @@ functions = [
             "properties": {
                 "location": {
                     "type": "string",
-                    "description": "The city and state where you want to work",
+                    "description": "The city and state where you want to work, ask the user to get the location information",
                 },
                 "job_title": {
                     "type": "string",
-                    "description": "The title of job, or the occupation",
+                    "description": "The title of job, or the occupation, ask the user to get the job title",
                 },
                 "is_full_time": {
                     "type": "boolean",
                     "description": "Is this job full-time or part-time",
                 },
             },
-            "required": ["location", "job_title"],
+            "required": ["location", "job_title", "is_full_time"],
         },
     },
     {
@@ -150,14 +155,18 @@ functions = [
             "properties": {
                 "email": {
                     "type": "string",
-                    "description": "The email of the applicant, this is required",
+                    "description": "The email of the applicant, ask the user to get the email address",
+                },
+                "phone": {
+                    "type": "string",
+                    "description": "The phone number of the applicant, ask the user to get the phone number",
                 },
                 "job_index": {
                     "type": "integer",
-                    "description": "The index of the job list to apply, this is required",
+                    "description": "The index of the job list to apply, this index number start from 1, not 0",
                 }
             },
-            "required": ["location", "format", "num_days"]
+            "required": ["email", "phone"]
         },
     },
 ]
@@ -171,11 +180,27 @@ def is_argument_valid(value, value_type):
     if value_type == 'string':
         return value != "" and value != 'any' and value is not None
     elif value_type == 'integer':
-        return value >= 0
+        return value > 0
     elif value_type == 'boolean':
         return True
     else:
         return False
+
+def update_user_profile(profile={}):
+    global user_profile, messages
+    if profile:
+        user_profile = profile
+    messages.append({
+        'role': 'assistant', 'content': f"current user profile is: {user_profile}"
+    })
+
+def update_job_preference(preference={}):
+    global job_preference, messages
+    if preference:
+        job_preference = preference
+    messages.append({
+        'role': 'assistant', 'content': f"current user job preference is: {job_preference}"
+    })
 
 def validate_arguments(name, arguments):
     global messages
@@ -185,29 +210,39 @@ def validate_arguments(name, arguments):
         value = arguments[key]
         if is_argument_valid(value, func_properties[key]['type']):
             continue
-        msg = f"Please provide: {func_properties[key]['description']}"
+        msg = f"Great, to apply the job you need to provide: {func_properties[key]['description']}"
         mia_print(msg)
         messages.append({'role': 'assistant' ,'content': msg})
         return False
     return True
 
-def apply_job(email = None, job_index = 0):
+def apply_job(phone=None, email=None, job_index=0):
     global current_jobs
-    result = validate_arguments('apply_job', {
-        'email': email, 'job_index': job_index
-    })
+    if len(current_jobs) == 0:
+        return recommend_jobs()
+    args = {
+        'email': email,
+        'phone': phone,
+        'job_index': job_index,
+    }
+    result = validate_arguments('apply_job', args)
     if not result:
         return
-    mia_print(json.dumps(current_jobs[job_index]))
+    update_user_profile(args)
+    mia_print(json.dumps(current_jobs[job_index - 1]))
     mia_print(f"Successfully applied job with index: {job_index}")
 
 def recommend_jobs(location=None, job_title=None, is_full_time=True):
     global current_jobs
-    result = validate_arguments('recommend_jobs', {
-        'location': location, 'job_title': job_title
-    })
+    args = {
+        'location': location,
+        'job_title': job_title,
+        'is_full_time': is_full_time
+    }
+    result = validate_arguments('recommend_jobs', args)
     if not result:
         return
+    update_job_preference(args)
     search = GoogleSearch({
         "num": 3,
         "q": job_title,
@@ -216,7 +251,7 @@ def recommend_jobs(location=None, job_title=None, is_full_time=True):
     })
     result = search.get_dict()
     keys = ['title', 'company_name', 'location', 'description']
-    job_list = result['jobs_results'][0:2]
+    job_list = result['jobs_results'][0:3]
     job_count = len(job_list)
     jobs = []
     if job_count > 0:
@@ -226,6 +261,7 @@ def recommend_jobs(location=None, job_title=None, is_full_time=True):
         print_json(json.dumps(job_info))
         jobs.append(job_info)
     current_jobs = jobs
+    messages.append({"role": "user", "content": f"available jobs list: {jobs}"})
     msg = "Which job do you want to apply or you want to view more jobs?"
     mia_print(msg)
     messages.append({"role": "user", "content": f"{msg}"})
@@ -252,17 +288,23 @@ def main():
     global messages
     mia_print("I am Mia, an AI assistant to help you find and apply jobs. \n And you can also ask me question about company benefits and working environment. \n Do you want to find a job?")
     messages.append({"role": "system", "content": SYSTEM_PROMPT})
+    update_user_profile()
+    update_job_preference()
     messages.append({"role": "user", "content": 'Do you want to find a job?'})
     while True:
         try:
             user_input = console.input("[b]You:[/b] ").strip()
-            if user_input == 'quit' or user_input == '\q':
+            if user_input == 'quit' or user_input == '\q' or user_input == 'q':
                 break
+            if user_input == 'show_messages':
+                print_json(json.dumps(messages))
+                continue
             messages.append({"role": "user", "content": user_input})
             chat_response = chat_completion_request(
                 messages, functions=functions
             )
             assistant_message = chat_response.json()["choices"][0]["message"]
+            # print(chat_response.json())
             messages.append(assistant_message)
             function_call = assistant_message.get('function_call', None)
             if function_call:
