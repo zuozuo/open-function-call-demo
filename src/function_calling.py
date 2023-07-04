@@ -14,18 +14,24 @@ GPT_MODEL = "gpt-4"
 GoogleSearch.SERP_API_KEY = os.getenv('SERPAPI_API_KEY')
 current_jobs = []
 messages = []
-user_profile = {
-    'email': 'zuo@gmail.com',
-    'phone': '18601257148',
-}
-job_preference = {
-    'location': 'Chicago',
-    'job_title': 'Head Chef',
-    'is_full_time': True
-}
+# user_profile = {
+#     'email': 'zuo@gmail.com',
+#     'phone': '18601257148',
+# }
+user_profile = {}
+# job_preference = {
+#     'location': 'Chicago',
+#     'job_title': 'Head Chef',
+#     'is_full_time': True
+# }
+job_preference = {}
 
 SYSTEM_PROMPT = '''
-You are Mia - an expert assistant for helping people to find and apply a job. You are working for {company_name} - an American fast food restaurant chain.
+You are Mia - an expert assistant for helping people to find and apply a job.
+To acheve this goal, try your best to collect needful information of the user, for example:
+city to work, prefered job type or job title, email address and phone and so on.
+Once you get such informations from user, remember that and then use them to plug into the functions to call.
+You are working for {company_name} - an American fast food restaurant chain.
 And you can also answer questions about company benefits and working environment.
 
 You are given the following extracted parts of a document and a question. Provide a conversational answer based on the context provided.
@@ -37,6 +43,7 @@ If you respond that you don't have a specific information add that this can be d
 
 Conversation Rules:
 - The most importmant rule is: Don't make assumptions about what values to plug into functions. Ask for clarification if a user request is ambiguous. It's better to ask one question each time.
+- Before call the function recommend_jobs, always ask the user to describe the work experience and professional skills in a few words
 - If the we have a user profile, try to use the profile info to plug into the functions firstly
 - You always introduce yourself as Mia.
 - Always write very short and concise responses!
@@ -275,6 +282,7 @@ function_dict = {
 def handle_function_call(function_info):
     name = function_info['name']
     mia_print(f"call function: {name}, with arguments {function_info['arguments']}")
+    # print_json(data=function_info)
     # print_json(function_info['arguments'])
     arguments = json.loads(function_info['arguments'])
     function_dict[name](**arguments)
