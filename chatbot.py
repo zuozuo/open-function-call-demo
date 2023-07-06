@@ -1,6 +1,7 @@
 from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
 from langchain.chat_models import ChatOpenAI
+from langchain.schema import HumanMessage, SystemMessage, AIMessage
 from langchain.prompts.chat import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
@@ -29,7 +30,7 @@ class Chatbot:
                 input_variables=["company_name"],
             )
         )
-        prompt = ChatPromptTemplate.from_messages([system_message_prompt])
+        prompt = SystemMessage(content=)
         chat = ChatOpenAI(temperature=0.9)
         llm_kwargs = {
             'functions': Functions.function_specs
